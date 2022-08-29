@@ -111,12 +111,8 @@ void handlelongBtn();
 void saveSettings();
 
 volatile uint16_t filamentLen = 0;
-int autostopLen = 400;
-uint8_t stepperSpeed = 0;
-uint8_t targetTemp = 200;
 double Setpoint, Input, Output;
 bool menuItemSelect = 0;
-bool autostop = 0;
 bool motorOn = 0;
 bool heaterOn = 1;
 const uint8_t pin_pidOut = D0;
@@ -141,7 +137,8 @@ struct settings_t {
     bool autostop;
     int autostopLen;
     uint8_t stepperSpeed;
-} settings = {false, 400, 0};
+    uint8_t targetTemp;
+} settings = {false, 400, 0, 200};
 
 Ticker* tmrLcdUpd;
 Ticker* tmrPidUpd;
@@ -170,7 +167,7 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(pin_btnOk), btnOk, FALLING);
     attachInterrupt(digitalPinToInterrupt(pin_btnDown), btnDown, FALLING);
     attachInterrupt(digitalPinToInterrupt(pin_btnUp), btnUp, FALLING);
-    Setpoint = targetTemp;
+    Setpoint = settings.targetTemp;
 
     thermistor = new Thermistor(A0, 3.3, 1.0, 1023, 220000, 100000, 25, 3950, 5, 20);
     extruderPID = new PID(&Input, &Output, &Setpoint, KP, KI, KD, DIRECT);
@@ -184,9 +181,6 @@ void setup() {
     tmrLcdUpd->start();
     tmrPidUpd->start();
     const bool readRes = Settings.read(settings);
-    autostop = settings.autostop;
-    autostopLen = settings.autostopLen;
-    stepperSpeed = settings.stepperSpeed;
 #ifdef DEBUG
     Serial.begin(115200);
     Serial.printf("SETTINGS REAAD: %d", readRes);
@@ -219,7 +213,7 @@ void updLcd() {
         case 0 ... 1:
             char temp[3];
             dtostrf(Input, 3, 0, temp);
-            sprintf(line1, "T:%s/%d %s   ", temp, targetTemp, heaterOn ? ON : OFF);
+            sprintf(line1, "T:%s/%d %s   ", temp, settings.targetTemp, heaterOn ? ON : OFF);
             sprintf(line2, "LEN:%d          ", filamentLen);
             break;
         // case 1:
@@ -227,8 +221,8 @@ void updLcd() {
         //     sprintf(line2, "SPD:%d  %s   ", stepperSpeed, motorOn ? ON : OFF);
         //     break;
         case 2 ... 3:
-            sprintf(line1, "SPD:%d  %s      ", stepperSpeed, motorOn ? ON : OFF);
-            sprintf(line2, "AS:%d   %s    ", autostopLen, autostop ? ON : OFF);
+            sprintf(line1, "SPD:%d  %s      ", settings.stepperSpeed, motorOn ? ON : OFF);
+            sprintf(line2, "AS:%d   %s    ", settings.autostopLen, settings.autostop ? ON : OFF);
             break;
         default:
             break;
@@ -310,7 +304,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
 
                     case 3:
-                        autostop = !autostop;
+                        settings.autostop = !settings.autostop;
 #ifdef DEBUG
                         Serial.println("!autostop");
 #endif
@@ -330,27 +324,27 @@ void handleMenu(BUTTON btn, bool longPress) {
                 switch (menu) {
                     case 0:  // extruder temp
                         if (longPress) {
-                            targetTemp += five;
+                            settings.targetTemp += five;
 #ifdef DEBUG
                             Serial.println("TEMP += 5");
 #endif
                         } else {
-                            targetTemp++;
+                            settings.targetTemp++;
 #ifdef DEBUG
                             Serial.println("TEMP ++");
 #endif
                         }
-                        Setpoint = targetTemp;
+                        Setpoint = settings.targetTemp;
                         tmrSaveSettings->start();
                         break;
                     case 2:  // extruder speed
                         if (longPress) {
-                            stepperSpeed += five;
+                            settings.stepperSpeed += five;
 #ifdef DEBUG
                             Serial.println("STEPPER SPD += 5");
 #endif
                         } else {
-                            stepperSpeed++;
+                            settings.stepperSpeed++;
                         }
                         tmrSaveSettings->start();
                         break;
@@ -359,9 +353,9 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                     case 3:
                         if (longPress) {
-                            autostopLen += (five * 2);
+                            settings.autostopLen += (five * 2);
                         } else {
-                            autostopLen++;
+                            settings.autostopLen++;
 #ifdef DEBUG
                             autostopLen = 400;
 #endif
@@ -379,18 +373,18 @@ void handleMenu(BUTTON btn, bool longPress) {
                 switch (menu) {
                     case 0:  // extruder temp
                         if (longPress) {
-                            targetTemp -= five;
+                            settings.targetTemp -= five;
                         } else {
-                            targetTemp--;
+                            settings.targetTemp--;
                         }
-                        Setpoint = targetTemp;
+                        Setpoint = settings.targetTemp;
                         tmrSaveSettings->start();
                         break;
                     case 2:  // extruder speed
                         if (longPress) {
-                            stepperSpeed -= five;
+                            settings.stepperSpeed -= five;
                         } else {
-                            stepperSpeed--;
+                            settings.stepperSpeed--;
                         }
                         tmrSaveSettings->start();
                         break;
@@ -399,9 +393,9 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                     case 3:
                         if (longPress) {
-                            autostopLen -= five;
+                            settings.autostopLen -= five;
                         } else {
-                            autostopLen--;
+                            settings.autostopLen--;
                         }
                         tmrSaveSettings->start();
                         break;
@@ -475,9 +469,6 @@ void handlelongBtn() {
 }
 
 void saveSettings() {
-    settings.autostop = autostop;
-    settings.autostopLen = autostopLen;
-    settings.stepperSpeed = stepperSpeed;
     const bool saveRes = Settings.save(settings);
     tmrSaveSettings->stop();
 #ifdef DEBUG
