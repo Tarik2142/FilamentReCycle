@@ -136,7 +136,7 @@ BUTTON last_btn = BTN_NONE;
 struct settings_t {
     bool autostop;
     int autostopLen;
-    uint8_t stepperSpeed;
+    uint16_t stepperSpeed;
     uint8_t targetTemp;
 } settings = {false, 400, 0, 200};
 
@@ -298,6 +298,13 @@ void handleMenu(BUTTON btn, bool longPress) {
 
                     case 2:
                         motorOn = !motorOn;
+                        if (motorOn)
+                        {
+                            tone(pin_stepperPwm, settings.stepperSpeed);
+                        }else{
+                            noTone(pin_stepperPwm);
+                        }
+                        
 #ifdef DEBUG
                         Serial.println("!motor");
 #endif
@@ -346,6 +353,10 @@ void handleMenu(BUTTON btn, bool longPress) {
                         } else {
                             settings.stepperSpeed++;
                         }
+                        if (motorOn)
+                        {
+                            tone(pin_stepperPwm, settings.stepperSpeed);
+                        }
                         tmrSaveSettings->start();
                         break;
                     case 1:  // filament len
@@ -385,6 +396,10 @@ void handleMenu(BUTTON btn, bool longPress) {
                             settings.stepperSpeed -= five;
                         } else {
                             settings.stepperSpeed--;
+                        }
+                        if (motorOn)
+                        {
+                            tone(pin_stepperPwm, settings.stepperSpeed);
                         }
                         tmrSaveSettings->start();
                         break;
