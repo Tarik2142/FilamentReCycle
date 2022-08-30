@@ -50,9 +50,10 @@ Method2:
 //#include "LittleFS.h"
 
 #define DEBOUNCE_TIME 50
-#define KP 2
-#define KI 5
-#define KD 1
+#define KP 21
+#define KI 1.25
+#define KD 86
+#define FILTER 0.5
 //#define DEBUG
 
 // PROGMEM const unsigned char img[] = {
@@ -169,7 +170,7 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(pin_btnUp), btnUp, FALLING);
     Setpoint = settings.targetTemp;
 
-    thermistor = new Thermistor(A0, 3.3, 1.0, 1023, 220000, 100000, 25, 3950, 5, 20);
+    thermistor = new Thermistor(A0, 3.3, 1.0, 1023, 220000, 100000, 25, 3950);
     extruderPID = new PID(&Input, &Output, &Setpoint, KP, KI, KD, DIRECT);
     tmrLcdUpd = new Ticker(updLcd, 1000, 0, MILLIS);
     tmrPidUpd = new Ticker(updPid, 100, 0, MILLIS);
@@ -185,6 +186,12 @@ void setup() {
     Serial.begin(115200);
     Serial.printf("SETTINGS REAAD: %d", readRes);
 #endif
+}
+
+double expRunningAverage(float newVal) {
+    static double filVal = 0;
+    filVal += (newVal - filVal) * FILTER;
+    return filVal;
 }
 
 void loop() {
@@ -263,7 +270,7 @@ void updLcd() {
 
 void updPid() {
     static unsigned long windowStartTime;
-    Input = thermistor->readTempC();
+    Input = expRunningAverage(thermistor->readTempC());
     extruderPID->Compute();
     unsigned long now = millis();
     if (now - windowStartTime > WindowSize) {  // time to shift the Relay Window
@@ -298,13 +305,12 @@ void handleMenu(BUTTON btn, bool longPress) {
 
                     case 2:
                         motorOn = !motorOn;
-                        if (motorOn)
-                        {
+                        if (motorOn) {
                             tone(pin_stepperPwm, settings.stepperSpeed);
-                        }else{
+                        } else {
                             noTone(pin_stepperPwm);
                         }
-                        
+
 #ifdef DEBUG
                         Serial.println("!motor");
 #endif
@@ -353,8 +359,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         } else {
                             settings.stepperSpeed++;
                         }
-                        if (motorOn)
-                        {
+                        if (motorOn) {
                             tone(pin_stepperPwm, settings.stepperSpeed);
                         }
                         tmrSaveSettings->start();
@@ -397,8 +402,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         } else {
                             settings.stepperSpeed--;
                         }
-                        if (motorOn)
-                        {
+                        if (motorOn) {
                             tone(pin_stepperPwm, settings.stepperSpeed);
                         }
                         tmrSaveSettings->start();
