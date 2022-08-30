@@ -41,19 +41,20 @@ Method2:
  * 10: sampleDelay: Milliseconds between samples (for smoothing)
  */
 
+//#define FORMATFS
+
 #include "ESP8266WiFi.h"
 #include "LCD12864RSPI.h"
 #include "PID_v1.h"
 #include "Ticker.h"
 #include "liteSettings.h"
 #include "thermistor.h"
-//#include "LittleFS.h"
+#ifdef FORMATFS
+#include "LittleFS.h"
+#endif
 
 #define DEBOUNCE_TIME 50
-#define KP 21
-#define KI 1.25
-#define KD 86
-#define FILTER 0.5
+#define FILTER 0.2
 //#define DEBUG
 
 // PROGMEM const unsigned char img[] = {
@@ -139,7 +140,10 @@ struct settings_t {
     int autostopLen;
     uint16_t stepperSpeed;
     uint8_t targetTemp;
-} settings = {false, 400, 0, 200};
+    double Kp;
+    double Ki;
+    double Kd;
+} settings = {false, 400, 0, 200, 2, 5, 1};
 
 Ticker* tmrLcdUpd;
 Ticker* tmrPidUpd;
@@ -151,13 +155,22 @@ liteSettings Settings;
 // Ticker tmrBtnUpd(updBtn, 200 , 0, MILLIS);
 
 void setup() {
-    WiFi.mode(WIFI_OFF);
     LCDA.initDriverPin(D7, D6, D5);
     LCDA.Initialise();  // INIT SCREEN
     delay(100);
     // LCDA.DrawFullScreen(img); // LOGO
     LCDA.DisplayString(0, 0, "     LOADING    ", 16);  //
-    // delay(5000);
+#ifdef FORMATFS
+    LittleFS.format();
+    LCDA.DisplayString(0, 0, "FS format done  ", 16);  //
+    delay(10000);
+#endif
+    const bool readRes = Settings.read(settings);
+#ifdef DEBUG
+    Serial.begin(115200);
+    Serial.printf("SETTINGS REAAD: %d", readRes);
+#endif
+    WiFi.mode(WIFI_OFF);
     pinMode(pin_pidOut, OUTPUT);
     pinMode(pin_pidIn, INPUT);
     pinMode(pin_filamentSense, INPUT);
@@ -170,8 +183,8 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(pin_btnUp), btnUp, FALLING);
     Setpoint = settings.targetTemp;
 
-    thermistor = new Thermistor(A0, 3.3, 1.0, 1023, 220000, 100000, 25, 3950);
-    extruderPID = new PID(&Input, &Output, &Setpoint, KP, KI, KD, DIRECT);
+    thermistor = new Thermistor(A0, 3.3, 1.0, 1023, 220000, 100000, 25, 3950, 5, 5);
+    extruderPID = new PID(&Input, &Output, &Setpoint, settings.Kp, settings.Ki, settings.Kd, DIRECT);
     tmrLcdUpd = new Ticker(updLcd, 1000, 0, MILLIS);
     tmrPidUpd = new Ticker(updPid, 100, 0, MILLIS);
     tmrBtnLongPress = new Ticker(handlelongBtn, 500, 0, MILLIS);
@@ -181,11 +194,6 @@ void setup() {
     extruderPID->SetMode(AUTOMATIC);
     tmrLcdUpd->start();
     tmrPidUpd->start();
-    const bool readRes = Settings.read(settings);
-#ifdef DEBUG
-    Serial.begin(115200);
-    Serial.printf("SETTINGS REAAD: %d", readRes);
-#endif
 }
 
 double expRunningAverage(float newVal) {
@@ -223,13 +231,23 @@ void updLcd() {
             sprintf(line1, "T:%s/%d %s   ", temp, settings.targetTemp, heaterOn ? ON : OFF);
             sprintf(line2, "LEN:%d          ", filamentLen);
             break;
-        // case 1:
-        //     sprintf(line1, "LEN:%d         ", filamentLen);
-        //     sprintf(line2, "SPD:%d  %s   ", stepperSpeed, motorOn ? ON : OFF);
-        //     break;
         case 2 ... 3:
             sprintf(line1, "SPD:%d  %s      ", settings.stepperSpeed, motorOn ? ON : OFF);
             sprintf(line2, "AS:%d   %s    ", settings.autostopLen, settings.autostop ? ON : OFF);
+            break;
+        case 4 ... 5:  //"Kp:10.1         "
+            char Kpbuff[4];
+            char Kibuff[4];
+            dtostrf(settings.Kp, 3, 1, Kpbuff);
+            dtostrf(settings.Ki, 3, 1, Kibuff);
+            sprintf(line1, "Kp:%s         ", Kpbuff);
+            sprintf(line2, "Ki:%s         ", Kibuff);
+            break;
+        case 6 ... 7:
+            char Kdbuff[4];
+            dtostrf(settings.Kd, 3, 1, Kdbuff);
+            sprintf(line1, "Kd:%s         ", Kdbuff);
+            sprintf(line2, "                ");
             break;
         default:
             break;
@@ -286,6 +304,11 @@ void updPid() {
 //"LEN:1000       <"
 //"SPD:1000  ONF  <"
 //"AUTOSTOP  ONF <-"
+
+void updPidK() {
+    extruderPID->SetTunings(settings.Kp, settings.Ki, settings.Kd);
+    tmrSaveSettings->start();
+}
 
 void handleMenu(BUTTON btn, bool longPress) {
     const uint8_t five = 5;
@@ -378,9 +401,33 @@ void handleMenu(BUTTON btn, bool longPress) {
                         }
                         tmrSaveSettings->start();
                         break;
+                    case 4:
+                        if (longPress) {
+                            settings.Kp += 1.0;
+                        } else {
+                            settings.Kp += 0.1;
+                        }
+                        updPidK();
+                        break;
+                    case 5:
+                        if (longPress) {
+                            settings.Ki += 1.0;
+                        } else {
+                            settings.Ki += 0.1;
+                        }
+                        updPidK();
+                        break;
+                    case 6:
+                        if (longPress) {
+                            settings.Kd += 1.0;
+                        } else {
+                            settings.Kd += 0.1;
+                        }
+                        updPidK();
+                        break;
                 }
             } else {
-                if (menu < 3) menu++;
+                if (menu < 6) menu++;
             }
 
             break;
@@ -417,6 +464,30 @@ void handleMenu(BUTTON btn, bool longPress) {
                             settings.autostopLen--;
                         }
                         tmrSaveSettings->start();
+                        break;
+                    case 4:
+                        if (longPress) {
+                            settings.Kp -= 1.0;
+                        } else {
+                            settings.Kp -= 0.1;
+                        }
+                        updPidK();
+                        break;
+                    case 5:
+                        if (longPress) {
+                            settings.Ki -= 1.0;
+                        } else {
+                            settings.Ki -= 0.1;
+                        }
+                        updPidK();
+                        break;
+                    case 6:
+                        if (longPress) {
+                            settings.Kd -= 1.0;
+                        } else {
+                            settings.Kd -= 0.1;
+                        }
+                        updPidK();
                         break;
                 }
             } else {
