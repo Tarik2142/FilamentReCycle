@@ -188,7 +188,7 @@ void setup() {
     tmrLcdUpd = new Ticker(updLcd, 1000, 0, MILLIS);
     tmrPidUpd = new Ticker(updPid, 100, 0, MILLIS);
     tmrBtnLongPress = new Ticker(handlelongBtn, 500, 0, MILLIS);
-    tmrSaveSettings = new Ticker(saveSettings, 60 * 1000, 0, MILLIS);
+    tmrSaveSettings = new Ticker(saveSettings, 30 * 1000, 0, MILLIS);
 
     extruderPID->SetOutputLimits(0, WindowSize);
     extruderPID->SetMode(AUTOMATIC);
@@ -236,18 +236,18 @@ void updLcd() {
             sprintf(line2, "AS:%d   %s    ", settings.autostopLen, settings.autostop ? ON : OFF);
             break;
         case 4 ... 5:  //"Kp:10.1         "
-            char Kpbuff[4];
-            char Kibuff[4];
+            char Kpbuff[5];
+            char Kibuff[5];
             dtostrf(settings.Kp, 3, 1, Kpbuff);
             dtostrf(settings.Ki, 3, 1, Kibuff);
             sprintf(line1, "Kp:%s         ", Kpbuff);
             sprintf(line2, "Ki:%s         ", Kibuff);
             break;
         case 6 ... 7:
-            char Kdbuff[4];
+            char Kdbuff[5];
             dtostrf(settings.Kd, 3, 1, Kdbuff);
             sprintf(line1, "Kd:%s         ", Kdbuff);
-            sprintf(line2, "                ");
+            sprintf(line2, "RESET PID       ");
             break;
         default:
             break;
@@ -346,6 +346,12 @@ void handleMenu(BUTTON btn, bool longPress) {
 #endif
                         tmrSaveSettings->start();
                         break;
+                    
+                    case 7:
+                        settings.Kd = 1;
+                        settings.Ki = 0;
+                        settings.Kp = 0;
+                    break;
 
                     default:
                         break;
@@ -403,7 +409,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                     case 4:
                         if (longPress) {
-                            settings.Kp += 1.0;
+                            settings.Kp += 10.0;
                         } else {
                             settings.Kp += 0.1;
                         }
@@ -411,7 +417,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                     case 5:
                         if (longPress) {
-                            settings.Ki += 1.0;
+                            settings.Ki += 10.0;
                         } else {
                             settings.Ki += 0.1;
                         }
@@ -419,7 +425,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                     case 6:
                         if (longPress) {
-                            settings.Kd += 1.0;
+                            settings.Kd += 10.0;
                         } else {
                             settings.Kd += 0.1;
                         }
@@ -427,7 +433,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                 }
             } else {
-                if (menu < 6) menu++;
+                if (menu < 7) menu++;
             }
 
             break;
@@ -467,7 +473,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                     case 4:
                         if (longPress) {
-                            settings.Kp -= 1.0;
+                            settings.Kp -= 10.0;
                         } else {
                             settings.Kp -= 0.1;
                         }
@@ -475,7 +481,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                     case 5:
                         if (longPress) {
-                            settings.Ki -= 1.0;
+                            settings.Ki -= 10.0;
                         } else {
                             settings.Ki -= 0.1;
                         }
@@ -483,7 +489,7 @@ void handleMenu(BUTTON btn, bool longPress) {
                         break;
                     case 6:
                         if (longPress) {
-                            settings.Kd -= 1.0;
+                            settings.Kd -= 10.0;
                         } else {
                             settings.Kd -= 0.1;
                         }
